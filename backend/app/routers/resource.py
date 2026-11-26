@@ -21,6 +21,16 @@ def require_service(module: str):
     return service
 
 
+def context_from_payload(payload: ActionPayload) -> dict[str, Any]:
+    context: dict[str, Any] = {}
+    context.update(payload.values or {})
+    context.update(payload.context or {})
+    context.update(payload.model_extra or {})
+    if payload.remark and not context.get("remark"):
+        context["remark"] = payload.remark
+    return context
+
+
 @router.get("/{module}", response_model=PageResult[dict])
 def list_entries(
     module: str,
@@ -94,5 +104,36 @@ def create_entry(module: str, payload: EntryPayload) -> ActionResult:
 @router.post("/{module}/{entry_id}/actions", response_model=ActionResult)
 def run_action(module: str, entry_id: int, payload: ActionPayload) -> ActionResult:
     service = require_service(module)
-    entry, message = service.run_action(entry_id, payload.action.strip())
-    return ActionResult(ok=entry is not None, message=message, entry=entry)
+    context = context_from_payload(payload)
+    outcome = service.run_action(entry_id, payload.action.strip(), context)
+    if len(outcome) == 3:
+        entry, message, ok = outcome  # type: ignore[misc]
+    else:
+        entry, message = outcome
+        ok = entry is not None
+    receipt = entry.get("receipt") if isinstance(entry, dict) else None
+    return ActionResult(
+        ok=bool(ok), message=message, entry=entry, receipt=receipt, data=receipt,
+    )
+
+
+@router.post("/load_window/handoff")
+def submit_load_window_handoff_by_scope(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    service = require_service("load_window")
+    return service.submit_handoff(context=payload or {})  # type: ignore[attr-defined]
+
+
+@router.post("/load_window/{entry_id}/handoff")
+def submit_load_window_handoff(
+    entry_id: int, payload: dict[str, Any] | None = None,
+) -> ActionResult:
+    service = require_service("load_window")
+    result = service.submit_handoff(  # type: ignore[attr-defined]
+        window_pk=entry_id, context=payload or {},
+    )
+    return ActionResult(
+        ok=bool(result.get("ok")),
+        message=str(result.get("message", "")),
+        entry=result.get("entry"),
+        receipt=result.get("receipt"),
+    )

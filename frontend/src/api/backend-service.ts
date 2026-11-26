@@ -1,8 +1,9 @@
-import { request } from './client'
+import { request, fetchJson } from './client'
 import { moduleMeta } from '@/data/modules'
 import type { ActionResult, EntryRow, OverviewResult, PageResult } from '@/data/types'
 
 export { moduleMeta }
+export { fetchJson }
 
 export async function listEntries(
   key: string,
@@ -29,12 +30,30 @@ export async function runAction(
   key: string,
   id: number,
   action: string,
+  context: Record<string, unknown> = {},
 ): Promise<ActionResult> {
   const response = await request(`/api/${key}/${id}/actions`, {
     method: 'POST',
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, context }),
   })
+  if (!response.ok) throw new Error(`操作接口返回 ${response.status}`)
   return await response.json()
+}
+
+export async function recoveryState<T = Record<string, unknown>>(): Promise<T> {
+  return await fetchJson<T>('/api/load_window/recovery/state')
+}
+
+export async function recoveryPost<T = ActionResult & Record<string, unknown>>(
+  path: string,
+  body: Record<string, unknown> = {},
+): Promise<T> {
+  const response = await request(`/api/load_window/recovery/${path.replace(/^\//, '')}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error(`失败恢复接口返回 ${response.status}`)
+  return (await response.json()) as T
 }
 
 export async function downloadEntries(

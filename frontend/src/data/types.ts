@@ -30,6 +30,9 @@ export type PageResult = {
 export type ActionResult = {
   ok: boolean
   message: string
+  entry?: EntryRow | null
+  receipt?: Record<string, unknown> | null
+  [key: string]: unknown
 }
 
 export type OverviewResult = {
